@@ -1,56 +1,57 @@
+# app.py
 import streamlit as st
-from transformers import pipeline
-import random
+from chat_module import predict_depression
+from memory_test import generate_sequence, check_sequence
+from mood_utils import plot_mood_graph
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="AI Depression Detection Chatbot", layout="centered")
+# Session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "memory_seq" not in st.session_state:
+    st.session_state.memory_seq = []
 
-# Load sentiment analysis pipeline
-@st.cache_resource
-def load_model():
-    return pipeline("sentiment-analysis", model="bhadresh-savani/bert-base-uncased-emotion")
+st.title("🧠 MindBot: Depression Support Chat & Cognitive Check")
 
-nlp = load_model()
+st.markdown("""
+Welcome to **MindBot**, your AI mental wellness companion.  
+It helps assess depressive patterns and offers a memory test and mood insights.
+""")
 
-# Simulated chatbot response (can be expanded)
-def get_bot_response(user_input):
-    responses = [
-        "I see. Can you tell me more about how you've been feeling lately?",
-        "I'm here for you. Do you want to talk about what's been bothering you?",
-        "That sounds tough. It's okay to feel this way sometimes.",
-        "Your feelings are valid. Would you like to explore them together?",
-    ]
-    return random.choice(responses)
+# --- Chatbot section ---
+st.header("💬 Chat with the AI")
+user_input = st.text_input("You:", key="chat_input")
 
-# UI
-st.title("🧠 AI Chatbot for Depression Detection")
-st.write("This chatbot detects emotional states from your messages and flags potential signs of depression.")
+if st.button("Send") and user_input:
+    label, score = predict_depression(user_input)
+    st.markdown(f"**AI:** Based on your message, I'm sensing: `{label}` (Confidence: {score})")
 
-# Chat history
-if "chat" not in st.session_state:
-    st.session_state.chat = []
+    st.session_state.chat_history.append((label, score))
 
-# Chat interface
-user_input = st.text_input("You:", key="input")
+# --- Memory Test ---
+st.header("🧠 Memory Test")
 
-if user_input:
-    # Analyze emotion
-    prediction = nlp(user_input)[0]
-    emotion = prediction['label']
-    score = prediction['score']
+if st.button("Start Memory Test"):
+    seq = generate_sequence()
+    st.session_state.memory_seq = seq
+    st.markdown(f"**Remember this sequence:** `{ ' '.join(map(str, seq)) }`")
+    st.markdown("After a few seconds, type it back below.")
 
-    # Append conversation
-    st.session_state.chat.append(("You", user_input))
-    bot_reply = get_bot_response(user_input)
-    st.session_state.chat.append(("Bot", bot_reply))
+if st.session_state.memory_seq:
+    user_answer = st.text_input("Enter the sequence you remember:", key="mem_test")
+    if st.button("Check Memory"):
+        if check_sequence(user_answer, st.session_state.memory_seq):
+            st.success("✅ Great! Your memory is sharp.")
+        else:
+            st.error(f"❌ Incorrect. Original was: {' '.join(map(str, st.session_state.memory_seq))}")
+        st.session_state.memory_seq = []
 
-    # Show chat
-    for sender, msg in st.session_state.chat:
-        st.write(f"**{sender}**: {msg}")
+# --- Mood Chart ---
+if st.session_state.chat_history:
+    st.header("📊 Mood History")
+    fig = plot_mood_graph(st.session_state.chat_history)
+    st.pyplot(fig)
 
-    # Show emotion result
-    st.markdown("---")
-    st.subheader("🧠 Emotional Analysis")
-    st.write(f"**Detected Emotion**: {emotion}")
-    st.progress(min(score, 1.0))
-    if emotion.lower() in ["sadness", "fear", "anger"]:
-        st.warning("⚠️ This message may indicate signs of negative emotional state or depression.")
+# Footer
+st.markdown("---")
+st.markdown("💡 _This app is for educational/demo purposes only. Not a replacement for medical diagnosis._")
